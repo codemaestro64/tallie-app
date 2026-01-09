@@ -1,0 +1,13 @@
+services:
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - restaurant_db:/app/data
+    env_file:
+      - .env.production
+    restart: always
+
+volumes:
+  restaurant_db:
