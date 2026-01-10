@@ -1,10 +1,10 @@
-import type { Request, Response, NextFunction } from "express"
-import logger from "../utils/log"
+import type { Request, Response, NextFunction } from 'express'
+import logger from '@/utils/log.js'
 
 export const requestLoggerMiddleware = (req: Request, res: Response, next: NextFunction) => {
   const start = process.hrtime.bigint()
 
-  res.on("finish", () => {
+  res.on('finish', () => {
     const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000
 
     logger.info(
@@ -12,12 +12,11 @@ export const requestLoggerMiddleware = (req: Request, res: Response, next: NextF
         method: req.method,
         path: req.originalUrl,
         status: res.statusCode,
-        duration: durationMs.toFixed(2) + "ms",
+        duration: durationMs.toFixed(2) + 'ms',
       },
-      "HTTP request"
+      'HTTP request',
     )
   })
 
-  next();
+  next()
 }
-

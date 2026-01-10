@@ -1,37 +1,54 @@
-import { Request, Response, NextFunction } from "express"
-import { AppError } from "../utils/appError"
-import logger from "../utils/log"
+import { Request, Response, NextFunction } from 'express'
+import { AppError } from '@/utils/appError.js'
+import logger from '@/utils/log.js'
+import { NodeEnv } from '@/types/general.types.js'
 
 export const errorHandlerMiddleware = (
-  err: any,
+  err: Error | AppError,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction,
 ) => {
-  const statusCode = err.statusCode || 500;
-  const status = `${statusCode}`.startsWith('4') ? 'fail' : 'error';
+  let statusCode = 500
+  let status = 'error'
+  let message = 'Something went very wrong!'
 
-  if (process.env.NODE_ENV === 'development') {
+  // Check if it's custom AppError
+  if (err instanceof AppError) {
+    statusCode = err.statusCode
+    status = `${statusCode}`.startsWith('4') ? 'fail' : 'error'
+    message = err.message
+  }
+
+  // Leak everything for easier debugging
+  if (process.env.NODE_ENV === NodeEnv.Development) {
     return res.status(statusCode).json({
       status,
       message: err.message,
       stack: err.stack,
       error: err,
-    });
+    })
   }
 
-  // Don't leak technical details
-  if (err.isOperational) {
+  // If it's a known operational error, send the message
+  if (err instanceof AppError && err.isOperational) {
     return res.status(statusCode).json({
       status,
-      message: err.message,
-    });
+      message,
+    })
   }
 
-  // Unhandled Coding/Unknown Errors
-  logger.error('ERROR 💥', err);
+  // Unexpected/Generic crash
+  const errObj = {
+    name: err.name,
+    message: err.message,
+    stack: err.stack,
+    path: req.path,
+  }
+  logger.error(JSON.stringify(errObj))
+
   return res.status(500).json({
     status: 'error',
     message: 'Something went very wrong!',
-  });
-};
+  })
+}

@@ -1,20 +1,19 @@
-
-import { RequestHandler, Request, Response } from "express"
-import { CreateReservationInput } from "../types"
+import { RequestHandler, Request, Response } from 'express'
+import { CreateRestaurantInput } from '@/types/index.js'
+import { GetRestaurantResponse } from '@/types/index.js'
 
 export const createRestaurant: RequestHandler<
-  {},
-  {},
-  CreateReservationInput
-> = async (req: Request, res: Response) => {
-
-}
+  Record<string, never>,
+  Record<string, never>,
+  CreateRestaurantInput
+> = async (req: Request, res: Response) => {}
 
 export const getRestaurantById: RequestHandler<
   { id: string },
-  any,
-  {},
-  {}
+  GetRestaurantResponse,
+  Record<string, never>,
+  Record<string, never>
 > = async (req: Request, res: Response) => {
   const { id } = req.params
-} 
+  // req.params.id is now correctly typed as a string
+}

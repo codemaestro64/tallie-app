@@ -1,3 +1,3 @@
-export * from "./general.types"
-export * from "./reservation.types"
-export * from "./restaurant.types"
+export * from './general.types.js'
+export * from './reservation.types.js'
+export * from './restaurant.types.js'
