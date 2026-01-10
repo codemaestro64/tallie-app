@@ -4,20 +4,36 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "pnpm db:generate && pnpm db:migrate && tsx watch src/server.ts",
+    "dev:generate": "drizzle-kit generate",
+    "dev:migrate": "drizzle-kit migrate",
+    "dev:studio": "drizzle-kit studio",
+
+    "build": "tsc",
+    "prestart": "pnpm db:migrate",
+    "start": "node dist/server.js",
+
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "test": "vitest"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.20.0",
   "dependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "better-sqlite3": "^12.5.0",
+    "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",
     "express": "^5.2.1",
+    "helmet": "^8.1.0",
+    "pino": "^10.1.1",
+    "prettier": "^3.7.4",
     "zod": "^4.3.5"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^25.0.3",
     "drizzle-kit": "^0.31.8",
