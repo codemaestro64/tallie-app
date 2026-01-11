@@ -6,8 +6,9 @@ export const DEFAULT_PORT = 3000
 export const DEFAULT_SHUTDOWN_TIMEOUT = 10_000
 
 // Load env file for the current environment
+const currentEnv = process.env.NODE_ENV || NodeEnv.Development
 dotenv.config({
-  path: `.env.${process.env.NODE_ENV ?? NodeEnv.Development}`,
+  path: `.env.${currentEnv}`,
 })
 
 const envSchema = z.object({

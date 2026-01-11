@@ -11,7 +11,6 @@ async function bootstrap() {
   try {
     // Initialize DB
     await db.initialize()
-    logger.info('Database initialized successfully')
 
     // Start HTTP server
     const server = app.listen(env.PORT, () => {

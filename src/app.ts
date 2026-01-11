@@ -7,33 +7,24 @@ import { errorHandlerMiddleware, requestLoggerMiddleware } from '@/middleware/in
 
 import restaurantRoutes from '@/routes/restaurant.routes.js'
 import reservationRoutes from '@/routes/reservation.routes.js'
+import tableRoutes from '@/routes/table.routes.js'
 
 const app: Express = express()
 
-// Security headers
 app.use(helmet())
-
-// Parse JSON bodies
 app.use(express.json())
-
-// Register custom middleware
-app.use(errorHandlerMiddleware)
 app.use(requestLoggerMiddleware)
-
-// CORS
-app.use(
-  cors({
-    origin: env.CORS_ORIGINS ?? '*', // fallback to "*" if undefined
-  }),
-)
+app.use(cors({ origin: env.CORS_ORIGINS ?? '*' }))
 
 // Routes
 app.use('/restaurants', restaurantRoutes)
 app.use('/reservations', reservationRoutes)
+app.use('/tables', tableRoutes)
 
 // 404 handler
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'Not found' })
 })
+app.use(errorHandlerMiddleware)
 
 export default app

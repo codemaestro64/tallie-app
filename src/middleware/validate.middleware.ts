@@ -1,31 +1,29 @@
-import { Request, Response, NextFunction } from 'express'
-import { ZodObject, ZodError } from 'zod'
+import { Request, Response, NextFunction, RequestHandler } from 'express'
+import { z, ZodError } from 'zod'
+import { StatusCodes } from 'http-status-codes'
+import { AppError } from '@/utils/appError.js'
 
-export const validateRequestMiddleware =
-  (schema: ZodObject) => async (req: Request, res: Response, next: NextFunction) => {
+export const validateRequestMiddleware = <T extends z.ZodObject>(schema: T): RequestHandler => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const validated = await schema.parseAsync({
+      const validated = (await schema.parseAsync({
         body: req.body,
         query: req.query,
         params: req.params,
-      })
+      })) as z.infer<T>
 
-      req.body = validated.body
-      //req.query = validated.query;
-      //req.params = validated.params;
+      // pass validated data to controller/handler
+      if (validated.body) Object.assign(req.body, validated.body)
+      if (validated.params) Object.assign(req.params, validated.params)
+      if (validated.query) Object.assign(req.query, validated.query)
 
-      return next()
+      next()
     } catch (error) {
       if (error instanceof ZodError) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'Validation failed',
-          errors: error.issues.map((issue) => ({
-            path: issue.path.join('.'),
-            message: issue.message,
-          })),
-        })
+        const message = error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ')
+        return next(new AppError(message, StatusCodes.BAD_REQUEST))
       }
-      return res.status(500).json({ status: 'error', message: 'Internal server error' })
+      next(error)
     }
   }
+}
