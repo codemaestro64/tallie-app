@@ -1,15 +1,18 @@
+import { z } from 'zod/mini'
 import { Table } from '@/types/index.js'
+import { createTableSchema, getAvailableTablesSchema } from '@/utils/index.js'
 
-export type TableDTO = {
+export type CreateTableRequest = z.infer<typeof createTableSchema>['body']
+export type ListAvailableTablesRequest = z.infer<typeof getAvailableTablesSchema>['query']
+
+export interface TableResponse {
   id: number
-  restaurant_id: number | null
   table_number: number
   capacity: number
 }
 
-export const toTableDTO = (row: Table): TableDTO => ({
+export const toTableResponse = (row: Table): TableResponse => ({
   id: row.id,
-  restaurant_id: row.restaurantId,
   table_number: row.tableNumber,
   capacity: row.capacity,
 })

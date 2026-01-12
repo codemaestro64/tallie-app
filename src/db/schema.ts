@@ -1,29 +1,34 @@
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
-import { relations } from 'drizzle-orm'
+import { sqliteTable, text, integer, check } from 'drizzle-orm/sqlite-core'
+import { relations, sql } from 'drizzle-orm'
 
-// Tables
-
-export const restaurantsTable = sqliteTable('restaurants', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  name: text('name').notNull(),
-  maxNumTables: integer('max_num_tables').notNull(),
-  openingTime: text('opening_time').notNull(),
-  closingTime: text('closing_time').notNull(),
-})
+export const restaurantsTable = sqliteTable(
+  'restaurants',
+  {
+    // Forced ID 1 + CHECK constraint making sure that only one restaurant ever exists
+    id: integer('id').primaryKey().default(1),
+    name: text('name').notNull(),
+    maxNumTables: integer('max_num_tables').notNull(),
+    openingTime: text('opening_time').notNull(),
+    closingTime: text('closing_time').notNull(),
+  },
+  (table) => ({
+    singleRowConstraint: check('single_row_check', sql`${table.id} = 1`),
+  }),
+)
 
 export const tablesTable = sqliteTable('tables', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  restaurantId: integer('restaurant_id').references(() => restaurantsTable.id),
   tableNumber: integer('table_number').notNull(),
   capacity: integer('capacity').notNull(),
 })
 
 export const reservationsTable = sqliteTable('reservations', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  restaurantId: integer('restaurant_id').references(() => restaurantsTable.id),
-  tableId: integer('table_id').references(() => tablesTable.id),
-  customerName: text('customer_name').notNull(), // TODO customers should have their own table
-  customerPhone: text('customer_phone').notNull(), // TODO customers should have their own table
+  tableId: integer('table_id')
+    .notNull()
+    .references(() => tablesTable.id),
+  customerName: text('customer_name').notNull(),
+  customerPhone: text('customer_phone').notNull(),
   partySize: integer('party_size').notNull(),
   startTime: integer('start_time', { mode: 'timestamp' }).notNull(),
   endTime: integer('end_time', { mode: 'timestamp' }).notNull(),
@@ -34,7 +39,6 @@ export const reservationsTable = sqliteTable('reservations', {
 
 export const peakHoursTable = sqliteTable('peak_hours', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  restaurantId: integer('restaurant_id').references(() => restaurantsTable.id),
   dayOfWeek: integer('day_of_week').notNull(),
   startHour: text('start_hour').notNull(),
   endHour: text('end_hour').notNull(),
@@ -43,7 +47,6 @@ export const peakHoursTable = sqliteTable('peak_hours', {
 
 export const waitlistTable = sqliteTable('waitlist', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  restaurantId: integer('restaurant_id').references(() => restaurantsTable.id),
   customerName: text('customer_name').notNull(),
   customerPhone: text('customer_phone').notNull(),
   partySize: integer('party_size').notNull(),
@@ -51,18 +54,7 @@ export const waitlistTable = sqliteTable('waitlist', {
   status: text('status', { enum: ['waiting', 'notified', 'expired'] }).default('waiting'),
 })
 
-// Relationships
-
-export const restaurantRelations = relations(restaurantsTable, ({ many }) => ({
-  tables: many(tablesTable),
-  reservations: many(reservationsTable), // has many through
-}))
-
-export const tableRelations = relations(tablesTable, ({ one, many }) => ({
-  restaurant: one(restaurantsTable, {
-    fields: [tablesTable.restaurantId],
-    references: [restaurantsTable.id],
-  }),
+export const tableRelations = relations(tablesTable, ({ many }) => ({
   reservations: many(reservationsTable),
 }))
 

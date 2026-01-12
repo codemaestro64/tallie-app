@@ -1,7 +1,7 @@
 import app from './app.js'
 import { env } from './env.js'
-import logger from '@/utils/log.js'
 import { db } from '@/db/client.js'
+import logger from '@/utils/log.js'
 
 /**
  * Bootstrap function
@@ -11,9 +11,10 @@ async function bootstrap() {
   try {
     // Initialize DB
     await db.initialize()
+    await db.applySchema()
 
     // Start HTTP server
-    const server = app.listen(env.PORT, () => {
+    const server = app.listen(env.PORT, '0.0.0.0', () => {
       logger.info(`API running in ${env.NODE_ENV} mode on port ${env.PORT}`)
     })
 

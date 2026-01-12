@@ -1,5 +1,6 @@
 import { drizzle, type LibSQLDatabase } from 'drizzle-orm/libsql'
-import { createClient } from '@libsql/client'
+import { createClient, type Client } from '@libsql/client'
+import { pushSQLiteSchema } from 'drizzle-kit/api'
 import * as schema from './schema.js'
 import logger from '@/utils/log.js'
 import { getDatabaseUrl } from './config.js'
@@ -7,6 +8,7 @@ import { getDatabaseUrl } from './config.js'
 class DB {
   private static instance: DB
   private _db: LibSQLDatabase<typeof schema> | null = null
+  private _client: Client | null = null
 
   private constructor() {} // prevent class instantiation from outside cos: singleton
 
@@ -29,6 +31,18 @@ class DB {
       logger.info('Database initialized successfully')
     } catch (error) {
       logger.error(`Failed to initialize database: ${error}`)
+      throw error
+    }
+  }
+
+  public async applySchema(): Promise<void> {
+    try {
+      logger.info('Performing database migration...')
+      const { apply } = await pushSQLiteSchema(schema, this._db as LibSQLDatabase<typeof schema>)
+      await apply()
+      logger.info('Database migration finished')
+    } catch (error) {
+      logger.error(error, 'Error performing migration')
       throw error
     }
   }

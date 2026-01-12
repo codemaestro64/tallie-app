@@ -1,15 +1,34 @@
 import { z } from 'zod'
 
 export const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/
+
 export const getRestaurantSchema = z.object({
-  params: z.object({
-    id: z
-      .string()
-      .transform((val) => Number(val))
-      .refine((n) => !isNaN(n), {
-        message: 'ID must be a valid number',
-      }),
-  }),
+  query: z
+    .object({
+      get_available_tables: z
+        .preprocess(
+          (val) => (typeof val === 'string' ? val.toLowerCase() === 'true' : !!val),
+          z.boolean(),
+        )
+        .optional(),
+      start_time: z
+        .string()
+        .datetime({ message: 'start_time must be a valid ISO string' })
+        .optional(),
+      end_time: z.string().datetime({ message: 'end_time must be a valid ISO string' }).optional(),
+    })
+    .refine(
+      (data) => {
+        // If one is present, both must be present
+        const hasStart = !!data.start_time
+        const hasEnd = !!data.end_time
+        return hasStart === hasEnd
+      },
+      {
+        message: "Both 'start_time' and 'end_time' must be provided together",
+        path: ['start_time'],
+      },
+    ),
 })
 
 export const createRestaurantSchema = z.object({
@@ -23,7 +42,6 @@ export const createRestaurantSchema = z.object({
 
 export const createReservationSchema = z.object({
   body: z.object({
-    restaurant_id: z.int('Restaurant ID is required'),
     table_id: z.int('Table ID is required'),
     customer_name: z.string().min(3, 'Customer name is too short'),
     customer_phone: z.string().min(10, 'Customer phone number is too short'),
@@ -33,35 +51,22 @@ export const createReservationSchema = z.object({
   }),
 })
 
+export const listReservationsSchema = z.object({
+  query: z.object({
+    date: z.string().date({ message: 'Invalid date string' }).pipe(z.coerce.date()).optional(),
+  }),
+})
+
 export const createTableSchema = z.object({
   body: z.object({
-    restaurant_id: z.int(),
     table_number: z.number().min(1, 'Table number is required').positive(),
-    capacity: z.number().min(1, 'Table capacity must be a positive number'),
+    capacity: z.number().min(1, 'Table capacity must be a positive number').positive(),
   }),
 })
 
-export const getAvailabilitySchema = z.object({
+export const getAvailableTablesSchema = z.object({
   query: z.object({
-    restaurant_id: z.string(),
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
-    party_size: z.string().transform(Number),
+    start_time: z.string().datetime({ message: 'start_time must be a valid ISO string' }),
+    end_time: z.string().datetime({ message: 'end_time must be a valid ISO string' }),
   }),
-})
-
-export const getRestaurantAvailabilitySchema = z.object({
-  params: z.object({
-    restaurant_id: z.coerce.number().positive('Invalid restaurant ID'),
-  }),
-
-  query: z
-    .object({
-      start_time: z
-        .string()
-        .datetime({ message: 'start_time must be a valid ISO string' })
-        .default(''),
-      duration: z.coerce.number().min(15, 'Duration must be at least 15 minutes').default(0),
-      party_size: z.coerce.number().positive().default(0),
-    })
-    .default({ start_time: '', duration: 0, party_size: 0 }),
 })

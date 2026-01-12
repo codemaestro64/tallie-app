@@ -1,7 +1,12 @@
+import { z } from 'zod'
+import { createRestaurantSchema, getRestaurantSchema } from '@/utils/index.js'
 import { Restaurant, Table } from '@/types/index.js'
-import { TableDTO, toTableDTO } from './table.dto.js'
+import { TableResponse, toTableResponse } from './index.js'
 
-export type RestaurantDTO = {
+export type GetRestaurantRequest = z.infer<typeof getRestaurantSchema>['query']
+
+export type CreateRestaurantRequest = z.infer<typeof createRestaurantSchema>['body']
+export type RestaurantResponse = {
   id: number
   name: string
   max_num_tables: number
@@ -9,12 +14,12 @@ export type RestaurantDTO = {
   closing_time: string
 }
 
-export interface RestaurantWithAvailabilityDTO extends RestaurantDTO {
-  available_tables: TableDTO[]
+export interface RestaurantWithAvailabilityResponse extends RestaurantResponse {
+  available_tables: TableResponse[]
 }
 
 // Base restaurant DTO without tables
-export const toRestaurantDTO = (row: Restaurant): RestaurantDTO => ({
+export const toRestaurantResponse = (row: Restaurant): RestaurantResponse => ({
   id: row.id,
   name: row.name,
   max_num_tables: row.maxNumTables,
@@ -23,10 +28,10 @@ export const toRestaurantDTO = (row: Restaurant): RestaurantDTO => ({
 })
 
 // Full restaurant with availability
-export const toRestaurantWithAvailabilityDTO = (
+export const toRestaurantWithAvailabilityResponse = (
   restaurant: Restaurant,
   tables: Table[],
-): RestaurantWithAvailabilityDTO => ({
-  ...toRestaurantDTO(restaurant),
-  available_tables: tables.map(toTableDTO),
+): RestaurantWithAvailabilityResponse => ({
+  ...toRestaurantResponse(restaurant),
+  available_tables: tables.map(toTableResponse),
 })

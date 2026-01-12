@@ -1,22 +1,17 @@
-FROM node:20-alpine AS builder
+FROM node:22-slim
+
+RUN corepack enable
 WORKDIR /app
-COPY package*.json ./
-RUN npm install
+
+# Install dependencies
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# Copy source and build
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
-FROM node:20-alpine
-WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/drizzle ./drizzle
-# install only production dependencies
-RUN npm install --omit=dev
-
-# persists db in volume
+# Create persistent data directory
 RUN mkdir -p /app/data
-ENV DATABASE_URL=file:/app/data/prod.db
 
-EXPOSE 8080
-CMD ["npm", "run", "start"]
+CMD pnpm start

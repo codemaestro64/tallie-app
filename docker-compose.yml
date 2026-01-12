@@ -1,13 +1,12 @@
 services:
   api:
     build: .
+    container_name: tallie-app
     ports:
-      - "3000:3000"
+      - "${PORT}:${PORT}"
     volumes:
-      - restaurant_db:/app/data
-    env_file:
-      - .env.production
+      - ./sqlite_data:/app/data
     restart: always
 
 volumes:
-  restaurant_db:
+  sqlite_data:

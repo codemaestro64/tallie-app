@@ -1,12 +1,12 @@
 import { Router, type Router as RouterType } from 'express'
 import * as RestaurantController from '@/controllers/restaurant.controller.js'
 import { validateRequestMiddleware } from '@/middleware/validate.middleware.js'
-import { createRestaurantSchema, getRestaurantAvailabilitySchema } from '@/utils/validators.js'
+import { createRestaurantSchema, getRestaurantSchema } from '@/utils/validators.js'
 
 const router: RouterType = Router()
 
 /**
- * @route   POST /api/restaurants
+ * @route   POST /api/restaurant
  * @desc    Create a new restaurant
  * @access  Public
  */
@@ -17,23 +17,10 @@ router.post(
 )
 
 /**
- * @route   GET /api/restaurants/:id
- * @desc    Get details of a specific restaurant
+ * @route   GET /restaurant
+ * @desc    Get restaurant details
+ * @access  Public
  */
-router.get(
-  '/:restaurant_id',
-  validateRequestMiddleware(getRestaurantAvailabilitySchema),
-  RestaurantController.getRestaurantById,
-)
-
-/**
- * @route   GET /api/restaurants/:id
- * @desc    Get details of a specific restaurant along with available tables
- */
-router.get(
-  '/availability/:id',
-  validateRequestMiddleware(getRestaurantAvailabilitySchema),
-  RestaurantController.getRestaurantAvailability,
-)
+router.get('/', validateRequestMiddleware(getRestaurantSchema), RestaurantController.getRestaurant)
 
 export default router

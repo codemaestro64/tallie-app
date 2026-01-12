@@ -17,9 +17,9 @@ app.use(requestLoggerMiddleware)
 app.use(cors({ origin: env.CORS_ORIGINS ?? '*' }))
 
 // Routes
-app.use('/restaurants', restaurantRoutes)
-app.use('/reservations', reservationRoutes)
-app.use('/tables', tableRoutes)
+app.use('/api/restaurant', restaurantRoutes)
+app.use('/api/reservations', reservationRoutes)
+app.use('/api/tables', tableRoutes)
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

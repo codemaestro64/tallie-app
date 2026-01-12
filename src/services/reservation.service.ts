@@ -1,16 +1,18 @@
 import { db } from '@/db/client.js'
-import {
-  reservationsTable,
-  tablesTable,
-  restaurantsTable,
-  waitlistTable,
-  peakHoursTable,
-} from '@/db/schema.js'
-import { eq, and, lt, gt, gte, ne, sql, asc } from 'drizzle-orm'
+import { reservationsTable, tablesTable, waitlistTable, peakHoursTable } from '@/db/schema.js'
+import { eq, and, lt, lte, gt, gte, ne, notExists, asc } from 'drizzle-orm'
 import { AppError } from '@/utils/appError.js'
 import { StatusCodes } from 'http-status-codes'
-import type { CreateReservationInput, Restaurant } from '@/types/index.js'
-import { dateToHM } from '@/utils/index.js'
+import {
+  CreateReservationRequest,
+  ReservationResponse,
+  ReservationSuggestionResponse,
+  toReservationResponse,
+  toReservationSuggestionResponse,
+  ReservationWithTable,
+} from '@/dto/index.js'
+import { ReservationStatus } from '@/types/index.js'
+import { Waitlist } from '@/types/waitlist.types.js'
 
 export class ReservationService {
   /**
@@ -24,78 +26,54 @@ export class ReservationService {
    * SEATING OPTIMIZATION
    * Finds smallest table for party size, excluding specific reservation if modifying.
    */
-  private async findBestTable(
-    restaurantId: number,
-    partySize: number,
-    start: Date,
-    end: Date,
-    excludeId?: number,
-  ) {
-    const suitableTables = await db.client
+  private async findBestTable(partySize: number, start: Date, end: Date, excludeId?: number) {
+    const results = await db.client
       .select()
       .from(tablesTable)
-      .where(and(eq(tablesTable.restaurantId, restaurantId), gte(tablesTable.capacity, partySize)))
+      .where(
+        and(
+          gte(tablesTable.capacity, partySize),
+          notExists(
+            db.client
+              .select()
+              .from(reservationsTable)
+              .where(
+                and(
+                  eq(reservationsTable.tableId, tablesTable.id),
+                  eq(reservationsTable.status, 'confirmed'),
+                  lt(reservationsTable.startTime, end),
+                  gt(reservationsTable.endTime, start),
+                  excludeId ? ne(reservationsTable.id, excludeId) : undefined,
+                ),
+              ),
+          ),
+        ),
+      )
       .orderBy(asc(tablesTable.capacity))
+      .limit(1)
 
-    for (const table of suitableTables) {
-      const overlapConditions = [
-        eq(reservationsTable.tableId, table.id),
-        eq(reservationsTable.status, 'confirmed'),
-        sql`${start.getTime()} < ${reservationsTable.endTime}`,
-        sql`${end.getTime()} > ${reservationsTable.startTime}`,
-      ]
-
-      if (excludeId) overlapConditions.push(ne(reservationsTable.id, excludeId))
-
-      const overlap = await db.client
-        .select()
-        .from(reservationsTable)
-        .where(and(...overlapConditions))
-        .get()
-      if (!overlap) return table
-    }
-    return null
+    // Return the first table found, or null
+    return results[0] ?? null
   }
 
-  private async validateTimeConstraintss(
-    restaurantID: number,
-    start: Date,
-    end: Date,
-    duration: number,
-  ) {
-    const restaurant = await db.client
-      .select()
-      .from(restaurantsTable)
-      .where(eq(restaurantsTable.id, restaurantID))
+  private async addToWaitlist(req: CreateReservationRequest, reqDate: Date): Promise<Waitlist> {
+    return await db.client
+      .insert(waitlistTable)
+      .values({
+        customerName: req.customer_name,
+        customerPhone: req.customer_phone,
+        partySize: req.party_size,
+        requestedTime: reqDate,
+      })
+      .returning()
       .get()
-
-    if (!restaurant) throw new AppError('Restaurant not found', StatusCodes.NOT_FOUND)
-    const startHM = dateToHM(start)
-    const endHM = dateToHM(end)
-
-    if (startHM < restaurant.openingTime || endHM > restaurant.closingTime) {
-      console.log(endHM)
-      throw new AppError(
-        `Outside hours: ${restaurant.openingTime}-${restaurant.closingTime}`,
-        StatusCodes.BAD_REQUEST,
-      )
-    }
   }
 
   /**
    * VALIDATION: Peak hours & Operating hours valiation
    */
-  private async validateTimeConstraints(
-    restaurantId: number,
-    start: Date,
-    end: Date,
-    duration: number,
-  ) {
-    const restaurant = await db.client
-      .select()
-      .from(restaurantsTable)
-      .where(eq(restaurantsTable.id, restaurantId))
-      .get()
+  private async validateTimeConstraints(start: Date, end: Date, duration: number) {
+    const restaurant = await db.client.query.restaurantsTable.findFirst()
     if (!restaurant) throw new AppError('Restaurant not found', StatusCodes.NOT_FOUND)
 
     // Check operating hours
@@ -113,12 +91,7 @@ export class ReservationService {
     const peakRule = await db.client
       .select()
       .from(peakHoursTable)
-      .where(
-        and(
-          eq(peakHoursTable.restaurantId, restaurantId),
-          eq(peakHoursTable.dayOfWeek, start.getDay()),
-        ),
-      )
+      .where(and(eq(peakHoursTable.dayOfWeek, start.getDay())))
       .all()
 
     for (const rule of peakRule) {
@@ -133,116 +106,60 @@ export class ReservationService {
     }
   }
 
-  /**
-   * CREATE RESERVATION
-   */
-  public async createOld(data: CreateReservationInput) {
-    const start = new Date(data.start_time)
-    const end = new Date(start.getTime() + data.duration_minutes * 60000)
+  public async create(
+    req: CreateReservationRequest,
+  ): Promise<ReservationResponse | ReservationSuggestionResponse> {
+    const start = new Date(req.start_time)
+    const end = new Date(start.getTime() + req.duration_minutes * 60000)
 
-    await this.validateTimeConstraints(data.restaurant_id, start, end, data.duration_minutes)
+    await this.validateTimeConstraints(start, end, req.duration_minutes)
 
-    const table = await this.findBestTable(data.restaurant_id, data.party_size, start, end)
-
-    if (!table) {
-      const waitEntry = await db.client
-        .insert(waitlistTable)
-        .values({
-          restaurantId: data.restaurant_id,
-          customerName: data.customer_name,
-          customerPhone: data.customer_phone,
-          partySize: data.party_size,
-          requestedTime: start,
-        })
-        .returning()
-        .get()
-      return { waitlisted: true, data: waitEntry }
-    }
-
-    const reservation = await db.client
-      .insert(reservationsTable)
-      .values({
-        restaurantId: data.restaurant_id,
-        tableId: table.id,
-        customerName: data.customer_name,
-        customerPhone: data.customer_phone,
-        partySize: data.party_size,
-        startTime: start,
-        endTime: end,
-        status: 'confirmed',
-      })
-      .returning()
-      .get()
-
-    return { waitlisted: false, data: reservation }
-  }
-
-  public async create(data: CreateReservationInput) {
-    const start = new Date(data.start_time)
-    const end = new Date(start.getTime() + data.duration_minutes * 60000)
-
-    await this.validateTimeConstraints(data.restaurant_id, start, end, data.duration_minutes)
-
-    const requestedTable = await db.client.query.tablesTable.findFirst({
-      where: and(
-        eq(tablesTable.id, data.table_id),
-        eq(tablesTable.restaurantId, data.restaurant_id),
-      ),
+    const reqTable = await db.client.query.tablesTable.findFirst({
+      where: and(eq(tablesTable.id, req.table_id)),
+      with: {
+        reservations: {
+          where: and(
+            eq(reservationsTable.status, ReservationStatus.Confirmed),
+            lt(reservationsTable.startTime, end),
+            gt(reservationsTable.endTime, start),
+          ),
+          limit: 1,
+        },
+      },
     })
 
-    if (!requestedTable) {
-      throw new AppError('Table not found.', StatusCodes.NOT_FOUND)
+    if (!reqTable) {
+      throw new AppError('Table Not Found', StatusCodes.NOT_FOUND)
     }
 
-    // Check for capacity or overlap
-    const hasOverlap = await db.client.query.reservationsTable.findFirst({
-      where: and(
-        eq(reservationsTable.tableId, data.table_id),
-        eq(reservationsTable.status, 'confirmed'),
-        lt(reservationsTable.startTime, end),
-        gt(reservationsTable.endTime, start),
-      ),
-    })
+    const hasOverlap = reqTable.reservations.length > 0
+    const isTooSmall = reqTable.capacity < req.party_size
 
-    const isTooSmall = requestedTable.capacity < data.party_size
+    if (hasOverlap || isTooSmall) {
+      const suggestedTable = await this.findBestTable(req.party_size, start, end)
+      if (!suggestedTable) {
+        await this.addToWaitlist(req, start)
+        return toReservationSuggestionResponse(
+          "Table unavailable. You've been added to the waitlist",
+          true,
+        )
+      }
 
-    // If there is a problem, find a suggestion before throwing
-    if (isTooSmall || hasOverlap) {
-      const suggestedTable = await this.findBestTable(
-        data.restaurant_id,
-        data.party_size,
-        start,
-        end,
-      )
+      const message = isTooSmall
+        ? `Table ${reqTable.tableNumber} is too small (Capacity: ${reqTable.capacity}).`
+        : `Table ${reqTable.tableNumber} is already booked for this time.`
 
-      const reason = isTooSmall
-        ? `Table ${requestedTable.tableNumber} is too small (Capacity: ${requestedTable.capacity}).`
-        : `Table ${requestedTable.tableNumber} is already booked for this time.`
-
-      const sn = suggestedTable
-        ? {
-            tableId: suggestedTable.id,
-            tableNumber: suggestedTable.tableNumber,
-            capacity: suggestedTable.capacity,
-            message: `Table ${suggestedTable.tableNumber} is available and fits your party.`,
-          }
-        : null
-      const err = JSON.stringify({
-        reason: reason,
-        suggestion: sn,
-      })
-      throw new AppError(err, StatusCodes.CONFLICT)
+      return toReservationSuggestionResponse(message, false, suggestedTable)
     }
 
     // If all clear, make reservation
     const reservation = await db.client
       .insert(reservationsTable)
       .values({
-        restaurantId: data.restaurant_id,
-        tableId: requestedTable.id,
-        customerName: data.customer_name,
-        customerPhone: data.customer_phone,
-        partySize: data.party_size,
+        tableId: reqTable.id,
+        customerName: req.customer_name,
+        customerPhone: req.customer_phone,
+        partySize: req.party_size,
         startTime: start,
         endTime: end,
         status: 'confirmed',
@@ -250,20 +167,51 @@ export class ReservationService {
       .returning()
       .get()
 
-    return { waitlisted: false, data: reservation }
+    const res: ReservationWithTable = {
+      ...reservation,
+      table: reqTable,
+    }
+
+    return toReservationResponse(res)
+  }
+
+  public async getReservations(date?: Date): Promise<ReservationResponse[]> {
+    const conditions = []
+    if (date) {
+      const startOfDay = new Date(date)
+      startOfDay.setHours(0, 0, 0, 0)
+
+      const endOfDay = new Date(date)
+      endOfDay.setHours(23, 59, 59, 999)
+
+      conditions.push(
+        gte(reservationsTable.startTime, startOfDay),
+        lte(reservationsTable.startTime, endOfDay),
+      )
+    }
+
+    const rows = await db.client.query.reservationsTable.findMany({
+      where: and(...conditions),
+      with: {
+        table: true,
+      },
+    })
+
+    return rows.map(toReservationResponse)
   }
 
   /**
    * MODIFY RESERVATION
    */
-  public async modify(id: number, updates: Partial<CreateReservationInput>) {
+  public async modify(id: number, updates: Partial<CreateReservationRequest>) {
     const current = await db.client
       .select()
       .from(reservationsTable)
       .where(eq(reservationsTable.id, id))
       .get()
-    if (!current || !current.restaurantId)
+    if (!current) {
       throw new AppError('Reservation not found', StatusCodes.NOT_FOUND)
+    }
 
     const start = updates.start_time ? new Date(updates.start_time) : current.startTime
     const duration =
@@ -271,9 +219,9 @@ export class ReservationService {
     const end = new Date(start.getTime() + duration * 60000)
     const partySize = updates.party_size ?? current.partySize
 
-    await this.validateTimeConstraints(current.restaurantId, start, end, duration)
+    await this.validateTimeConstraints(start, end, duration)
 
-    const table = await this.findBestTable(current.restaurantId, partySize, start, end, id)
+    const table = await this.findBestTable(partySize, start, end, id)
     if (!table) throw new AppError('Table unavailable for modified details', StatusCodes.CONFLICT)
 
     return await db.client
@@ -295,7 +243,7 @@ export class ReservationService {
   public async cancel(id: number) {
     const res = await db.client
       .update(reservationsTable)
-      .set({ status: 'cancelled' })
+      .set({ status: ReservationStatus.Cancelled })
       .where(eq(reservationsTable.id, id))
       .returning()
       .get()
