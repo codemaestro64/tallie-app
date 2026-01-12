@@ -21,7 +21,7 @@ Production-ready restaurant reservation management system built with Node.js, Ex
 ### 1. Install Dependencies
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/codemaestro64/tallie-app
 cd tallie-app
 pnpm install
 ```
